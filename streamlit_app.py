@@ -2,16 +2,14 @@ import streamlit as st
 import pandas as pd
 from datetime import timedelta, time
 
-# --- 1. CONFIGURACIÓN VISUAL ---
+# --- CONFIGURACIÓN VISUAL ---
 st.set_page_config(
-    page_title="Gestión Buenos Aires Bazar", # Título en la pestaña del navegador
-    page_icon="🏢", # Icono en la pestaña
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Gestión Buenos Aires Bazar",
+    page_icon="🏢",
+    layout="wide"
 )
 
-# --- 2. CSS PERSONALIZADO (Estilos) ---
-# Esto oculta el menú de hamburguesa y el footer de "Made with Streamlit" para que parezca una app pro
+# Ocultar menú de Streamlit para estilo limpio
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -21,71 +19,52 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# --- 3. ENCABEZADO CON LOGO ---
+# Encabezado
 col_logo, col_titulo = st.columns([1, 5])
-
 with col_logo:
-    # Aquí puedes poner la URL de tu logo si la tienes en internet.
-    # Si no, usamos un emoji gigante como logo temporal.
     st.markdown("# 🏢") 
-
 with col_titulo:
     st.title("Panel de Control de Asistencia")
     st.markdown("**Buenos Aires BAZAR** | Reporte Mensual")
 
-st.divider() # Una línea separadora elegante
+st.divider()
 
-# ... AQUI SIGUE EL RESTO DE TU CÓDIGO (Desde el Sidebar) ...
-
-
-import streamlit as st
-import pandas as pd
-from datetime import timedelta, time
-
-# Configuración de la página
-st.set_page_config(page_title="Control de Asistencia", layout="wide")
-
-st.title("Sistema de Control de Presentismo")
-st.markdown("Sube el archivo Transaction exportado por el sistema.")
-
-# --- BARRA LATERAL PARA CONFIGURACIÓN ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("Configuración")
-    hora_entrada = st.time_input("Horario de Ingreso estipulado", value=time(10, 00))
-    st.info(f"Se calcularán tardanzas después de las {hora_entrada}")
+    st.header("⚙️ Configuración")
+    hora_entrada = st.time_input("Horario de Ingreso", value=time(10, 00))
+    st.info("Calculando tardanzas después de las 10:00 AM")
 
 # 1. CARGA DE DATOS
-archivo = st.file_uploader("Sube el archivo CSV o Excel aquí", type=['csv', 'xlsx'])
+archivo = st.file_uploader("📂 Sube el archivo Transaction aquí", type=['csv', 'xlsx'])
 
 if archivo:
     try:
-        # Leemos el archivo saltando encabezados
         if archivo.name.endswith('.csv'):
             df = pd.read_csv(archivo, header=3)
         else:
             df = pd.read_excel(archivo, header=3)
 
         if 'First Name' not in df.columns:
-            st.error("Error de formato. Verifica los encabezados en la fila 4.")
+            st.error("⚠️ Error: El archivo no tiene el formato correcto (Fila 4 encabezados).")
             st.stop()
 
-        # 2. LIMPIEZA Y PREPARACIÓN
+        # 2. LIMPIEZA
         df['Empleado'] = df['Last Name'] + ', ' + df['First Name']
-        
-        # Unimos Fecha y Hora
+        # Convertir fecha y hora
         df['Marca Temporal'] = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Time'].astype(str))
         
-        # Ordenamos
+        # Ordenar
         df = df.sort_values(by=['Empleado', 'Marca Temporal'])
 
-        # 3. FILTRO DE REBOTES (< 20 min)
+        # Filtro de Rebotes (20 min)
         df['Diferencia'] = df.groupby('Empleado')['Marca Temporal'].diff()
         filtro_rebotes = (df['Diferencia'].isna()) | (df['Diferencia'] > timedelta(minutes=20))
         df_limpio = df[filtro_rebotes].copy()
         
-        st.success("Archivo procesado y limpio de duplicados.")
+        st.success(f"✅ Archivo procesado. Se limpiaron duplicados.")
 
-        # --- CÁLCULO DE TARDANZAS ---
+        # 3. CÁLCULO DE TARDANZAS
         primeras_fichadas = df_limpio.groupby(['Empleado', 'Date'])['Marca Temporal'].min().reset_index()
 
         def calcular_demora(fecha_hora_real):
@@ -97,51 +76,72 @@ if archivo:
 
         primeras_fichadas['Minutos_Tarde'] = primeras_fichadas['Marca Temporal'].apply(calcular_demora)
 
-
-        # 4. ANÁLISIS POR EMPLEADO
+        # 4. ANÁLISIS POR EMPLEADO (INTERACTIVO)
         st.divider()
-        st.header("Analizar por Empleado")
+        st.subheader("👤 Analizar Empleado")
         
         lista_empleados = sorted(df_limpio['Empleado'].unique())
-        empleado_seleccionado = st.selectbox("Selecciona un empleado:", lista_empleados)
+        empleado_seleccionado = st.selectbox("Buscar empleado:", lista_empleados)
 
         if empleado_seleccionado:
+            # Datos del empleado
             datos_empleado = df_limpio[df_limpio['Empleado'] == empleado_seleccionado].copy()
-            tardanzas_empleado = primeras_fichadas[primeras_fichadas['Empleado'] == empleado_seleccionado].copy()
+            tardanzas_emp = primeras_fichadas[primeras_fichadas['Empleado'] == empleado_seleccionado].copy()
 
+            # Resumen diario
             resumen_diario = datos_empleado.groupby('Date').size().reset_index(name='Fichadas')
-            resumen_final = pd.merge(resumen_diario, tardanzas_empleado[['Date', 'Minutos_Tarde']], on='Date', how='left')
+            resumen_final = pd.merge(resumen_diario, tardanzas_emp[['Date', 'Minutos_Tarde']], on='Date', how='left')
 
-            col1, col2, col3, col4 = st.columns(4)
+            # Métricas
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Días Asistidos", len(resumen_final))
+            c2.metric("Minutos Tarde (Mes)", f"{resumen_final['Minutos_Tarde'].sum()} min")
             
-            dias_totales = len(resumen_final)
-            dias_ok = len(resumen_final[resumen_final['Fichadas'] == 4])
-            total_minutos_tarde = resumen_final['Minutos_Tarde'].sum()
-            promedio_llegada = resumen_final[resumen_final['Minutos_Tarde'] > 0]['Minutos_Tarde'].mean()
-
-            col1.metric("Días Asistidos", dias_totales)
-            col2.metric("Días Completos", dias_ok)
-            col3.metric("Minutos Tarde Total", f"{total_minutos_tarde} min")
-            col4.metric("Promedio demora", f"{promedio_llegada:.1f} min" if total_minutos_tarde > 0 else "0 min")
-
-            st.subheader("Detalle Diario")
+            # Tabla Interactiva
+            st.write("👇 **Haz clic en cualquier fila** para ver los horarios exactos de ese día:")
             
             tabla_mostrar = resumen_final[['Date', 'Fichadas', 'Minutos_Tarde']].copy()
-            tabla_mostrar['Estado'] = tabla_mostrar['Fichadas'].apply(lambda x: "OK" if x==4 else "Incompleto")
             
-            st.dataframe(
-                tabla_mostrar.style.bar(subset=['Minutos_Tarde'], color='#ffcdd2'),
-                use_container_width=True
+            # Función de colores
+            def color_estado(val):
+                color = '#ffcdd2' if val < 4 else '#c8e6c9' # Rojo suave vs Verde suave
+                return f'background-color: {color}'
+
+            # CREAMOS LA TABLA CON SELECCIÓN ACTIVADA
+            event = st.dataframe(
+                tabla_mostrar.style.applymap(color_estado, subset=['Fichadas']),
+                use_container_width=True,
+                on_select="rerun",     # Esto activa la interactividad
+                selection_mode="single-row", # Solo deja elegir una fila a la vez
+                hide_index=True
             )
+
+            # LÓGICA DE CLIC: Si alguien selecciona una fila...
+            if len(event.selection.rows) > 0:
+                # 1. Identificar qué fila se tocó
+                indice_seleccionado = event.selection.rows[0]
+                fecha_seleccionada = tabla_mostrar.iloc[indice_seleccionado]['Date']
+                
+                # 2. Buscar los fichajes de esa fecha exacta
+                detalles_dia = datos_empleado[datos_empleado['Date'] == fecha_seleccionada]
+                
+                # 3. Mostrar la "Lupa"
+                st.info(f"🔎 **Detalle del día {fecha_seleccionada}:**")
+                
+                # Mostramos una tablita limpia con las horas
+                st.table(detalles_dia[['Time', 'Device Name']])
+            
+            else:
+                st.caption("Selecciona una fecha arriba para ver el detalle de horarios.")
+
 
         # 5. REPORTE GENERAL
         st.divider()
-        st.header("Ranking de Tardanzas")
-        
-        ranking = primeras_fichadas.groupby('Empleado')['Minutos_Tarde'].sum().reset_index()
-        ranking = ranking.sort_values('Minutos_Tarde', ascending=False)
-        
-        st.dataframe(ranking, use_container_width=True)
+        with st.expander("📊 Ver Ranking de Tardanzas General"):
+            ranking = primeras_fichadas.groupby('Empleado')['Minutos_Tarde'].sum().reset_index()
+            ranking = ranking.sort_values('Minutos_Tarde', ascending=False)
+            st.dataframe(ranking, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Hubo un error procesando: {e}")
+
