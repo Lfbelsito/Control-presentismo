@@ -50,7 +50,7 @@ if not st.session_state['autenticado']:
 col_logo, col_texto = st.columns([1, 6])
 with col_logo:
     # 👇 LINK DE TU LOGO
-    LOGO_URL = "https://cdn-icons-png.flaticon.com/512/4091/4091968.png" 
+    LOGO_URL = "https://www.buenosairesbazar.com.ar/Temp/App_WebSite/App_PictureFiles/logonew.svg" 
     st.image(LOGO_URL, width=80)
 with col_texto:
     st.title("Control de Asistencia Completo")
