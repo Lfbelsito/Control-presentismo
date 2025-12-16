@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import timedelta, time
+import io # Nueva librería para manejar la descarga en Excel
 
 # --- 1. CONFIGURACIÓN INICIAL ---
 st.set_page_config(
@@ -45,6 +46,14 @@ if not st.session_state['autenticado']:
 # =========================================================
 # APP PRINCIPAL
 # =========================================================
+
+# --- FUNCIÓN PARA GENERAR EXCEL (NUEVO) ---
+def convertir_a_excel(df, nombre_hoja='Datos'):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name=nombre_hoja)
+    processed_data = output.getvalue()
+    return processed_data
 
 # --- ENCABEZADO ---
 col_logo, col_texto = st.columns([1, 6])
@@ -148,12 +157,11 @@ if archivo:
             k1.metric("Días Asistidos", dias_totales)
             k2.metric("Días Completos", dias_completos, delta="OK" if dias_completos == dias_totales else "Incompleto")
             k3.metric("Minutos Tarde", f"{tarde_total} min", delta_color="inverse")
-            k4.metric("Horas Extras (Aprobadas)", f"{extra_total} min", delta="A favor")
+            k4.metric("Horas Extras", f"{extra_total} min", delta="A favor")
 
             st.write("👇 **Haz clic en una fila** para ver detalle:")
             
-            # --- AQUÍ ESTABA EL PROBLEMA DE LA LÍNEA LARGA ---
-            # La dividimos para que no se corte al copiar
+            # Preparar tabla visual
             columnas_a_mostrar = [
                 'Date', 
                 'Cant_Fichadas', 
@@ -163,29 +171,26 @@ if archivo:
                 'Min_Extras'
             ]
             tabla_ver = datos_emp[columnas_a_mostrar].copy()
-            # ------------------------------------------------
             
+            # Guardamos una copia para descargar en Excel antes de formatear las horas como texto
+            tabla_excel = tabla_ver.copy() 
+
+            # Formato visual
             tabla_ver['Entrada_Real'] = tabla_ver['Entrada_Real'].dt.strftime('%H:%M')
             tabla_ver['Salida_Real'] = tabla_ver['Salida_Real'].dt.strftime('%H:%M')
 
-            # Lógica de Colores
+            # Colores
             def colorear_celdas(row):
                 estilos = [''] * len(row)
                 BRAND_RED = '#D32F2F'    
                 BRAND_YELLOW_BG = '#FFF9C4'
                 
-                # Presentismo (Rojo si falta)
                 if row['Cant_Fichadas'] < 4:
                     estilos[1] = f'color: {BRAND_RED}; font-weight: 900;' 
-                
-                # Tarde (Rojo si llega tarde)
                 if row['Min_Tarde'] > 5:
                     estilos[4] = f'color: {BRAND_RED}; font-weight: bold;'
-                
-                # Extras (Fondo Amarillo)
                 if row['Min_Extras'] > 0:
                     estilos[5] = f'background-color: {BRAND_YELLOW_BG}; color: black; font-weight: bold;'
-                
                 return estilos
 
             event = st.dataframe(
@@ -195,6 +200,16 @@ if archivo:
                 on_select="rerun",
                 selection_mode="single-row"
             )
+
+            # --- BOTÓN DE DESCARGA EXCEL (NUEVO) ---
+            excel_data = convertir_a_excel(tabla_excel, nombre_hoja=seleccion[:30])
+            st.download_button(
+                label=f"📥 Descargar Ficha de {seleccion} en Excel",
+                data=excel_data,
+                file_name=f'Ficha_{seleccion}.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            # ---------------------------------------
 
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]
@@ -207,7 +222,7 @@ if archivo:
 
         # --- REPORTE GENERAL ---
         st.divider()
-        with st.expander("📊 Ver Rankings del Mes"):
+        with st.expander("📊 Ver Rankings y Descargar Reporte General"):
             col_rank1, col_rank2 = st.columns(2)
             with col_rank1:
                 st.markdown("**🏆 Ranking: Extras Acumuladas**")
@@ -225,6 +240,16 @@ if archivo:
                     .style.highlight_max(subset=['Min_Tarde'], color='#ffcdd2'),
                     use_container_width=True, hide_index=True
                 )
+            
+            # Botón descarga general
+            st.divider()
+            excel_general = convertir_a_excel(diario, nombre_hoja='Reporte Mensual')
+            st.download_button(
+                label="📥 Descargar Reporte Completo de Todos (Excel)",
+                data=excel_general,
+                file_name='Reporte_Mensual_Completo.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
 
     except Exception as e:
         st.error(f"Error procesando el archivo: {e}")
