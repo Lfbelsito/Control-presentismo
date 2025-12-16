@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import timedelta, time
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
+# --- 1. CONFIGURACIÓN INICIAL (Siempre va primero) ---
 st.set_page_config(
     page_title="Gestión Buenos Aires Bazar",
     page_icon="🏢",
@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. ESTILOS (SÓLO PARA OCULTAR MENÚS, SIN CAMBIAR COLORES DE FONDO) ---
+# --- 2. ESTILOS CSS (Para ocultar elementos de Streamlit) ---
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -19,40 +19,80 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. SEGURIDAD (CANDADO) ---
-# Si prefieres quitar la clave, pon un # al inicio de las siguientes 4 líneas
-clave = st.sidebar.text_input("🔒 Clave de Acceso", type="password")
-if clave != "1519":
-    st.warning("👈 Ingresa la clave '1519' en el menú lateral para ver los datos.")
-    st.stop() 
+# --- 3. SISTEMA DE LOGIN (PANTALLA DE BLOQUEO) ---
 
-# --- 4. ENCABEZADO ---
+# Definimos la clave correcta
+CLAVE_REAL = "1519"
+
+# Inicializamos el estado de autenticación si no existe
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+
+# Función para verificar la contraseña
+def verificar_clave():
+    if st.session_state['password_input'] == CLAVE_REAL:
+        st.session_state['autenticado'] = True
+    else:
+        st.error("⛔ Contraseña incorrecta")
+
+# SI NO ESTÁ AUTENTICADO, MOSTRAMOS SOLO EL LOGIN
+if not st.session_state['autenticado']:
+    # Centramos el login usando columnas
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("## 🔒 Acceso Restringido")
+        st.markdown("Sistema de Gestión de Personal | **Buenos Aires BAZAR**")
+        
+        # Campo de contraseña (input)
+        st.text_input(
+            "Ingresa la clave de acceso:", 
+            type="password", 
+            key="password_input", 
+            on_change=verificar_clave
+        )
+        
+        st.caption("Por favor, ingresa la clave asignada para desbloquear el sistema.")
+    
+    # Detenemos el código aquí para que no cargue nada más
+    st.stop()
+
+
+# =========================================================
+# A PARTIR DE AQUÍ, SOLO SE EJECUTA SI LA CLAVE ES CORRECTA
+# =========================================================
+
+# --- 4. ENCABEZADO CON LOGO ---
 col_logo, col_texto = st.columns([1, 6])
 
 with col_logo:
-    # Reemplaza el enlace entre comillas por la dirección de tu logo
-    LOGO_URL = "https://share.google/1glH6eX5vazkTjNo2" 
+    # 👇 PEGA AQUÍ EL LINK DE TU LOGO
+    LOGO_URL = "https://share.google/HfXDL7GQSlrgNYNVP" 
     st.image(LOGO_URL, width=80)
- 
 
 with col_texto:
     st.title("Control de Asistencia")
-    st.caption("Sistema de gestión de fichadas | **Buenos Aires BAZAR**")
+    st.caption("Panel de Administración | Reporte Mensual")
 
 st.divider()
 
-# --- 5. CONFIGURACIÓN LATERAL ---
+# --- 5. CONFIGURACIÓN LATERAL (Ahora sí aparece el sidebar) ---
 with st.sidebar:
     st.header("⚙️ Parámetros")
     hora_entrada = st.time_input("Horario Ingreso", value=time(10, 00))
     st.info("Se calculan tardanzas basadas en este horario.")
+    
+    # Botón de Cerrar Sesión (Opcional)
+    if st.button("Cerrar Sesión"):
+        st.session_state['autenticado'] = False
+        st.rerun()
 
-# --- 6. LÓGICA PRINCIPAL ---
+# --- 6. LÓGICA PRINCIPAL (TU APP) ---
 archivo = st.file_uploader("📂 Sube el archivo Transaction aquí", type=['csv', 'xlsx'])
 
 if archivo:
     try:
-        # Lectura inteligente
+        # Lectura
         if archivo.name.endswith('.csv'):
             df = pd.read_csv(archivo, header=3)
         else:
@@ -67,7 +107,7 @@ if archivo:
         df['Marca Temporal'] = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Time'].astype(str))
         df = df.sort_values(by=['Empleado', 'Marca Temporal'])
 
-        # Filtro Rebotes (20 min)
+        # Filtro Rebotes
         df['Diferencia'] = df.groupby('Empleado')['Marca Temporal'].diff()
         filtro_rebotes = (df['Diferencia'].isna()) | (df['Diferencia'] > timedelta(minutes=20))
         df_limpio = df[filtro_rebotes].copy()
@@ -95,33 +135,25 @@ if archivo:
             datos_emp = df_limpio[df_limpio['Empleado'] == seleccion].copy()
             tardanzas_emp = primeras_fichadas[primeras_fichadas['Empleado'] == seleccion].copy()
 
-            # Merge
             resumen = datos_emp.groupby('Date').size().reset_index(name='Fichadas')
             final = pd.merge(resumen, tardanzas_emp[['Date', 'Minutos_Tarde']], on='Date', how='left')
 
-            # Métricas
             k1, k2, k3 = st.columns(3)
             k1.metric("Días Asistidos", len(final))
             
             tarde_total = final['Minutos_Tarde'].sum()
             k2.metric("Minutos Tarde Acumulados", f"{tarde_total} min")
 
-            # Tabla
             st.write("👇 Selecciona una fila para ver el detalle:")
             
-            # --- CORRECCIÓN DE COLORES DE LA TABLA ---
-            # Usamos una lógica más segura que no rompa el modo oscuro
             def colorear(val):
-                # En lugar de colores pastel fijos, usamos lógica condicional simple
-                # Si quieres que se vea bien en oscuro y claro, a veces es mejor no forzar background
                 if val < 4:
-                    return 'color: red; font-weight: bold' # Letra roja negrita (se lee en blanco y negro)
+                    return 'color: #ff5252; font-weight: bold' 
                 else:
-                    return 'color: green' # Letra verde
+                    return 'color: #69f0ae' 
             
             display_cols = final[['Date', 'Fichadas', 'Minutos_Tarde']]
             
-            # Aplicamos estilo solo al texto, no al fondo, para evitar problemas de contraste
             event = st.dataframe(
                 display_cols.style.applymap(colorear, subset=['Fichadas']),
                 use_container_width=True,
@@ -130,7 +162,6 @@ if archivo:
                 hide_index=True
             )
 
-            # Drill-down
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]
                 fecha = display_cols.iloc[idx]['Date']
