@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. ESTILOS CSS (BRANDING) ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
     <style>
         .stApp { background-color: #FFFFFF; color: #000000; }
@@ -50,7 +50,7 @@ if not st.session_state['autenticado']:
 col_logo, col_texto = st.columns([1, 6])
 with col_logo:
     # 👇 LINK DE TU LOGO
-    LOGO_URL = "https://www.buenosairesbazar.com.ar/Temp/App_WebSite/App_PictureFiles/logonew.svg" 
+    LOGO_URL = "https://cdn-icons-png.flaticon.com/512/4091/4091968.png" 
     st.image(LOGO_URL, width=80)
 with col_texto:
     st.title("Control de Asistencia Completo")
@@ -152,4 +152,79 @@ if archivo:
 
             st.write("👇 **Haz clic en una fila** para ver detalle:")
             
-            tabla_ver = datos_emp[['Date', 'Cant_Fichadas', 'Entrada_
+            # --- AQUÍ ESTABA EL PROBLEMA DE LA LÍNEA LARGA ---
+            # La dividimos para que no se corte al copiar
+            columnas_a_mostrar = [
+                'Date', 
+                'Cant_Fichadas', 
+                'Entrada_Real', 
+                'Salida_Real', 
+                'Min_Tarde', 
+                'Min_Extras'
+            ]
+            tabla_ver = datos_emp[columnas_a_mostrar].copy()
+            # ------------------------------------------------
+            
+            tabla_ver['Entrada_Real'] = tabla_ver['Entrada_Real'].dt.strftime('%H:%M')
+            tabla_ver['Salida_Real'] = tabla_ver['Salida_Real'].dt.strftime('%H:%M')
+
+            # Lógica de Colores
+            def colorear_celdas(row):
+                estilos = [''] * len(row)
+                BRAND_RED = '#D32F2F'    
+                BRAND_YELLOW_BG = '#FFF9C4'
+                
+                # Presentismo (Rojo si falta)
+                if row['Cant_Fichadas'] < 4:
+                    estilos[1] = f'color: {BRAND_RED}; font-weight: 900;' 
+                
+                # Tarde (Rojo si llega tarde)
+                if row['Min_Tarde'] > 5:
+                    estilos[4] = f'color: {BRAND_RED}; font-weight: bold;'
+                
+                # Extras (Fondo Amarillo)
+                if row['Min_Extras'] > 0:
+                    estilos[5] = f'background-color: {BRAND_YELLOW_BG}; color: black; font-weight: bold;'
+                
+                return estilos
+
+            event = st.dataframe(
+                tabla_ver.style.apply(colorear_celdas, axis=1),
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+
+            if len(event.selection.rows) > 0:
+                idx = event.selection.rows[0]
+                fecha_seleccionada = tabla_ver.iloc[idx]['Date']
+                st.info(f"🔎 **Detalle del día {fecha_seleccionada}:**")
+                detalle = datos_crudos_emp[datos_crudos_emp['Date'] == fecha_seleccionada][['Time', 'Device Name']]
+                st.table(detalle)
+            else:
+                st.caption("Selecciona un día para ver los fichajes exactos.")
+
+        # --- REPORTE GENERAL ---
+        st.divider()
+        with st.expander("📊 Ver Rankings del Mes"):
+            col_rank1, col_rank2 = st.columns(2)
+            with col_rank1:
+                st.markdown("**🏆 Ranking: Extras Acumuladas**")
+                rank_extra = diario.groupby('Empleado')['Min_Extras'].sum().reset_index()
+                st.dataframe(
+                    rank_extra.sort_values('Min_Extras', ascending=False)
+                    .style.highlight_max(subset=['Min_Extras'], color='#FFF9C4'),
+                    use_container_width=True, hide_index=True
+                )
+            with col_rank2:
+                st.markdown("**🐢 Ranking: Tardanzas Acumuladas**")
+                rank_tarde = diario.groupby('Empleado')['Min_Tarde'].sum().reset_index()
+                st.dataframe(
+                    rank_tarde.sort_values('Min_Tarde', ascending=False)
+                    .style.highlight_max(subset=['Min_Tarde'], color='#ffcdd2'),
+                    use_container_width=True, hide_index=True
+                )
+
+    except Exception as e:
+        st.error(f"Error procesando el archivo: {e}")
