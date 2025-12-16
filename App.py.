@@ -1,0 +1,126 @@
+import streamlit as st
+import pandas as pd
+from datetime import timedelta, time
+
+# Configuración de la página
+st.set_page_config(page_title="Control de Asistencia", layout="wide")
+
+st.title("🕒 Sistema de Control de Presentismo")
+st.markdown("Sube el archivo `Transaction` exportado por el sistema.")
+
+# --- BARRA LATERAL PARA CONFIGURACIÓN ---
+with st.sidebar:
+    st.header("⚙️ Configuración")
+    hora_entrada = st.time_input("Horario de Ingreso estipulado", value=time(10, 00))
+    st.info(f"Se calcularán tardanzas después de las {hora_entrada}")
+
+# 1. CARGA DE DATOS
+archivo = st.file_uploader("Sube el archivo CSV o Excel aquí", type=['csv', 'xlsx'])
+
+if archivo:
+    try:
+        # Leemos el archivo saltando encabezados
+        if archivo.name.endswith('.csv'):
+            df = pd.read_csv(archivo, header=3)
+        else:
+            df = pd.read_excel(archivo, header=3)
+
+        if 'First Name' not in df.columns:
+            st.error("Error de formato. Verifica los encabezados en la fila 4.")
+            st.stop()
+
+        # 2. LIMPIEZA Y PREPARACIÓN
+        df['Empleado'] = df['Last Name'] + ', ' + df['First Name']
+        
+        # Unimos Fecha y Hora
+        df['Marca Temporal'] = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Time'].astype(str))
+        
+        # Ordenamos
+        df = df.sort_values(by=['Empleado', 'Marca Temporal'])
+
+        # 3. FILTRO DE "REBOTES" (< 20 min)
+        df['Diferencia'] = df.groupby('Empleado')['Marca Temporal'].diff()
+        filtro_rebotes = (df['Diferencia'].isna()) | (df['Diferencia'] > timedelta(minutes=20))
+        df_limpio = df[filtro_rebotes].copy()
+        
+        st.success("✅ Archivo procesado y limpio de duplicados.")
+
+        # --- CÁLCULO DE TARDANZAS (NUEVO) ---
+        # 1. Obtenemos solo la PRIMERA fichada de cada día para cada empleado (Ingreso)
+        primeras_fichadas = df_limpio.groupby(['Empleado', 'Date'])['Marca Temporal'].min().reset_index()
+
+        # 2. Función para calcular minutos de demora
+        def calcular_demora(fecha_hora_real):
+            # Creamos la fecha objetivo (Mismo día, pero a las 10:00 AM u hora configurada)
+            objetivo = fecha_hora_real.replace(hour=hora_entrada.hour, minute=hora_entrada.minute, second=0)
+            
+            if fecha_hora_real > objetivo:
+                # Calculamos diferencia
+                diferencia = fecha_hora_real - objetivo
+                # Devolvemos minutos totales
+                return int(diferencia.total_seconds() / 60)
+            return 0 # Si llegó temprano, es 0
+
+        primeras_fichadas['Minutos_Tarde'] = primeras_fichadas['Marca Temporal'].apply(calcular_demora)
+
+
+        # 4. ANÁLISIS POR EMPLEADO
+        st.divider()
+        st.header("🔎 Analizar por Empleado")
+        
+        lista_empleados = sorted(df_limpio['Empleado'].unique())
+        empleado_seleccionado = st.selectbox("Selecciona un empleado:", lista_empleados)
+
+        if empleado_seleccionado:
+            # Filtramos datos generales y datos de tardanza
+            datos_empleado = df_limpio[df_limpio['Empleado'] == empleado_seleccionado].copy()
+            tardanzas_empleado = primeras_fichadas[primeras_fichadas['Empleado'] == empleado_seleccionado].copy()
+
+            # Resumen de Fichadas (si son 4 o no)
+            resumen_diario = datos_empleado.groupby('Date').size().reset_index(name='Fichadas')
+            
+            # Unimos la info de tardanzas al resumen diario
+            resumen_final = pd.merge(resumen_diario, tardanzas_empleado[['Date', 'Minutos_Tarde']], on='Date', how='left')
+
+            # MÉTRICAS
+            col1, col2, col3, col4 = st.columns(4)
+            
+            dias_totales = len(resumen_final)
+            dias_ok = len(resumen_final[resumen_final['Fichadas'] == 4])
+            total_minutos_tarde = resumen_final['Minutos_Tarde'].sum()
+            promedio_llegada = resumen_final[resumen_final['Minutos_Tarde'] > 0]['Minutos_Tarde'].mean()
+
+            col1.metric("Días Asistidos", dias_totales)
+            col2.metric("Días Completos", dias_ok)
+            # Aquí está el acumulado que pediste:
+            col3.metric("Minutos Tarde Acumulados", f"{total_minutos_tarde} min", delta_color="inverse")
+            col4.metric("Promedio demora (días tarde)", f"{promedio_llegada:.1f} min" if total_minutos_tarde > 0 else "0 min")
+
+            # VISUALIZACIÓN
+            st.subheader("Detalle Diario")
+            
+            # Función para colorear
+            # Preparamos la tabla para mostrar
+            tabla_mostrar = resumen_final[['Date', 'Fichadas', 'Minutos_Tarde']].copy()
+            tabla_mostrar['Estado'] = tabla_mostrar['Fichadas'].apply(lambda x: "✅ OK" if x==4 else "⚠️ Incompleto")
+            
+            # Mostramos tabla
+            st.dataframe(
+                tabla_mostrar.style.bar(subset=['Minutos_Tarde'], color='#ffcdd2'),
+                use_container_width=True
+            )
+            
+            st.caption("Nota: La barra roja indica visualmente qué días llegó más tarde.")
+
+        # 5. REPORTE DE TARDANZAS GENERAL
+        st.divider()
+        st.header("📊 Ranking de Tardanzas (Mes)")
+        
+        # Agrupamos todas las tardanzas por empleado
+        ranking = primeras_fichadas.groupby('Empleado')['Minutos_Tarde'].sum().reset_index()
+        ranking = ranking.sort_values('Minutos_Tarde', ascending=False) # Los más tardones primero
+        
+        st.dataframe(ranking, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Error: {e}")
