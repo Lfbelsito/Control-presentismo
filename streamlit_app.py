@@ -10,35 +10,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. ESTILOS CSS (BRANDING CORPORATIVO) ---
-# Aquí definimos los colores de la marca para forzar el estilo
+# --- 2. ESTILOS CSS (BRANDING) ---
 st.markdown("""
     <style>
-        /* FORZAR MODO CLARO (Fondo Blanco, Texto Negro) */
-        .stApp {
-            background-color: #FFFFFF;
-            color: #000000;
-        }
-        
-        /* Estilo de la barra lateral (Un gris muy clarito para diferenciar) */
-        [data-testid="stSidebar"] {
-            background-color: #F8F8F8;
-        }
-
-        /* Títulos en negro fuerte */
-        h1, h2, h3, h4, h5 {
-            color: #000000 !important;
-            font-weight: 700 !important;
-        }
-        
-        /* Ocultamos elementos innecesarios de Streamlit */
+        .stApp { background-color: #FFFFFF; color: #000000; }
+        [data-testid="stSidebar"] { background-color: #F8F8F8; }
+        h1, h2, h3, h4, h5 { color: #000000 !important; font-weight: 700 !important; }
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        
-        /* Ajuste de métricas para que se vean bien en blanco */
-        [data-testid="stMetricValue"] {
-            color: #000000;
-        }
+        [data-testid="stMetricValue"] { color: #000000; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,7 +32,6 @@ def verificar_clave():
     if st.session_state['password_input'] == CLAVE_REAL:
         st.session_state['autenticado'] = True
     else:
-        # Usamos un markdown rojo para el error que combine con la marca
         st.markdown(f":no_entry: <span style='color:#D32F2F; font-weight:bold'>Contraseña incorrecta</span>", unsafe_allow_html=True)
 
 if not st.session_state['autenticado']:
@@ -71,7 +50,7 @@ if not st.session_state['autenticado']:
 col_logo, col_texto = st.columns([1, 6])
 with col_logo:
     # 👇 LINK DE TU LOGO
-    LOGO_URL = "https://cdn-icons-png.flaticon.com/512/4091/4091968.png" 
+    LOGO_URL = "https://www.buenosairesbazar.com.ar/Temp/App_WebSite/App_PictureFiles/logonew.svg" 
     st.image(LOGO_URL, width=80)
 with col_texto:
     st.title("Control de Asistencia Completo")
@@ -89,7 +68,7 @@ with st.sidebar:
     st.markdown("### ⏳ Regla de Extras")
     umbral_extras = st.number_input("Mínimo minutos para contar Extra", min_value=0, value=30, step=5)
     st.divider()
-    if st.button("Cerrar Sesión", type="primary"): # Botón rojo primario
+    if st.button("Cerrar Sesión", type="primary"): 
         st.session_state['autenticado'] = False
         st.rerun()
 
@@ -173,33 +152,4 @@ if archivo:
 
             st.write("👇 **Haz clic en una fila** para ver detalle:")
             
-            tabla_ver = datos_emp[['Date', 'Cant_Fichadas', 'Entrada_Real', 'Salida_Real', 'Min_Tarde', 'Min_Extras']].copy()
-            tabla_ver['Entrada_Real'] = tabla_ver['Entrada_Real'].dt.strftime('%H:%M')
-            tabla_ver['Salida_Real'] = tabla_ver['Salida_Real'].dt.strftime('%H:%M')
-
-            # --- LÓGICA DE COLORES CORPORATIVOS ---
-            def colorear_celdas(row):
-                estilos = [''] * len(row)
-                
-                # Definimos los colores de la marca
-                BRAND_RED = '#D32F2F'    # Rojo fuerte corporativo
-                BRAND_YELLOW_BG = '#FFF9C4' # Fondo amarillo suave (para que se lea el texto negro)
-                
-                # 1. Presentismo (Rojo si falta)
-                if row['Cant_Fichadas'] < 4:
-                    estilos[1] = f'color: {BRAND_RED}; font-weight: 900;' 
-                
-                # 2. Tarde (Rojo si llega tarde)
-                if row['Min_Tarde'] > 5:
-                    estilos[4] = f'color: {BRAND_RED}; font-weight: bold;'
-                
-                # 3. Extras (Fondo AMARILLO con texto negro para destacar positivo)
-                if row['Min_Extras'] > 0:
-                    estilos[5] = f'background-color: {BRAND_YELLOW_BG}; color: black; font-weight: bold;'
-                
-                return estilos
-
-            event = st.dataframe(
-                tabla_ver.style.apply(colorear_celdas, axis=1),
-                use_container_width=True,
-                hide_index=
+            tabla_ver = datos_emp[['Date', 'Cant_Fichadas', 'Entrada_
