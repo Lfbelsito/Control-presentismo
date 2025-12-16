@@ -26,7 +26,8 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 def verificar_clave():
-    if st.session_state['password_input'] == CLAVE_REAL:1519
+    # Esta es la parte que daba error. Aquí está alineada perfectamente:
+    if st.session_state['password_input'] == CLAVE_REAL:
         st.session_state['autenticado'] = True
     else:
         st.error("⛔ Contraseña incorrecta")
@@ -41,7 +42,7 @@ if not st.session_state['autenticado']:
     st.stop()
 
 # =========================================================
-# APP PRINCIPAL (SOLO SI ESTÁ LOGUEADO)
+# APP PRINCIPAL
 # =========================================================
 
 # --- ENCABEZADO ---
@@ -105,16 +106,15 @@ if archivo:
 
         # --- CÁLCULO DE MINUTOS (NUEVA LÓGICA) ---
         
-        # Agrupamos por día: Buscamos la PRIMERA y la ÚLTIMA fichada del día
-        diario = df_limpio.groupby(['Empleado', 'Date'])['Marca Temporal'].agg(['min', 'max', 'count']).reset_index()
-        diario.columns = ['Empleado', 'Date', 'Entrada_Real', 'Salida_Real', 'Cant_Fichadas']
+        # Agrupamos por día
+        diario = df_limpio.groupby(['Empleado', 'Date'])['Marca Temporal'].agg(['min', 'max']).reset_index()
+        diario.columns = ['Empleado', 'Date', 'Entrada_Real', 'Salida_Real']
 
-        # Función Maestra: Calcula Tardanza y Extra en una sola pasada
+        # Función Maestra
         def calcular_tiempos(row):
             entrada = row['Entrada_Real']
             salida = row['Salida_Real']
             
-            # Definimos los objetivos de ese día específico
             objetivo_entrada = entrada.replace(hour=hora_entrada.hour, minute=hora_entrada.minute, second=0)
             objetivo_salida = salida.replace(hour=hora_salida.hour, minute=hora_salida.minute, second=0)
             
@@ -125,7 +125,6 @@ if archivo:
                 minutos_tarde = int(diff.total_seconds() / 60)
             
             # 2. CÁLCULO DE EXTRAS
-            # Solo si se fue DESPUÉS del horario de salida
             minutos_extras = 0
             if salida > objetivo_salida:
                 diff_extra = salida - objetivo_salida
@@ -143,55 +142,45 @@ if archivo:
         seleccion = st.selectbox("Selecciona un empleado:", lista)
 
         if seleccion:
-            # Filtramos datos del empleado
             datos_emp = diario[diario['Empleado'] == seleccion].copy()
             
-            # Métricas Generales
+            # Métricas
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("Días Trabajados", len(datos_emp))
             k2.metric("Llegadas Tarde (Total)", f"{datos_emp['Min_Tarde'].sum()} min")
-            k3.metric("Horas Extras (Total)", f"{datos_emp['Min_Extras'].sum()} min", delta="A favor del empleado")
+            k3.metric("Horas Extras (Total)", f"{datos_emp['Min_Extras'].sum()} min", delta="A favor")
             
             promedio_extra = datos_emp['Min_Extras'].mean()
             k4.metric("Promedio Extras/Día", f"{int(promedio_extra)} min")
 
-            st.write("👇 **Detalle diario (Entrada y Salida):**")
+            st.write("👇 **Detalle diario:**")
             
-            # Preparamos tabla bonita
             tabla_ver = datos_emp[['Date', 'Entrada_Real', 'Salida_Real', 'Min_Tarde', 'Min_Extras']].copy()
             
-            # Formateamos las horas para que no muestre la fecha completa en las celdas de hora
+            # Formato de hora limpia
             tabla_ver['Entrada_Real'] = tabla_ver['Entrada_Real'].dt.strftime('%H:%M')
             tabla_ver['Salida_Real'] = tabla_ver['Salida_Real'].dt.strftime('%H:%M')
 
-            # Lógica de colores para la tabla
             def colorear_celdas(row):
-                estilos = [''] * len(row) # Por defecto nada
-                
-                # Si llegó tarde, pintamos la celda de Min_Tarde en rojo
-                if row['Min_Tarde'] > 5: # Tolerancia de 5 min (opcional)
-                    estilos[3] = 'color: #ff5252; font-weight: bold' # Rojo
-                
-                # Si hizo extras, pintamos la celda de Min_Extras en azul/verde
+                estilos = [''] * len(row)
+                if row['Min_Tarde'] > 5:
+                    estilos[3] = 'color: #ff5252; font-weight: bold'
                 if row['Min_Extras'] > 0:
-                    estilos[4] = 'color: #448aff; font-weight: bold' # Azul
-                
+                    estilos[4] = 'color: #448aff; font-weight: bold'
                 return estilos
 
-            # Mostrar tabla interactiva
             st.dataframe(
                 tabla_ver.style.apply(colorear_celdas, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
             
-            st.caption("Nota: Si 'Min_Extras' es 0, significa que se retiró a su hora o antes. No contamos ingresos tempranos como extra.")
+            st.caption("Nota: Si 'Min_Extras' es 0, significa que se retiró a su hora o antes.")
 
         # --- REPORTE GENERAL ---
         st.divider()
         with st.expander("📊 Ver Ranking: ¿Quién hizo más Extras?"):
             rank = diario.groupby('Empleado')[['Min_Tarde', 'Min_Extras']].sum().reset_index()
-            # Ordenamos por quien hizo mas extras
             st.dataframe(rank.sort_values('Min_Extras', ascending=False), use_container_width=True)
 
     except Exception as e:
