@@ -9,6 +9,19 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- BLOQUE DE SEGURIDAD (CANDADO) ---
+# Cambia "admin123" por la contraseña que tú quieras
+contrasena_secreta = "1519" 
+
+# Pedimos la clave en la barra lateral
+clave_ingresada = st.sidebar.text_input("🔒 Ingresa la clave de acceso", type="password")
+
+if clave_ingresada != contrasena_secreta:
+    st.error("⛔ Acceso denegado. Ingresa la clave correcta en el menú lateral.")
+    st.stop() # Esto detiene la app aquí. Nadie ve nada más abajo si no pone la clave.
+
+
+
 # Ocultar menú de Streamlit para estilo limpio
 hide_st_style = """
             <style>
