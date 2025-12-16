@@ -7,15 +7,18 @@ st.set_page_config(
     page_title="Gestión Buenos Aires Bazar",
     page_icon="🏢",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed" # Inicia cerrado, pero ahora SÍ tendrás botón para abrirlo
 )
 
-# --- 2. ESTILOS CSS ---
+# --- 2. ESTILOS CSS (CORREGIDO) ---
 st.markdown("""
     <style>
+        /* Ocultamos el menú de los 3 puntos y el pie de página "Made with Streamlit" */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        header {visibility: hidden;}
+        
+        /* BORRÉ LA LÍNEA QUE OCULTABA EL HEADER */
+        /* Ahora podrás ver la flecha para abrir la barra lateral */
     </style>
 """, unsafe_allow_html=True)
 
@@ -46,8 +49,8 @@ if not st.session_state['autenticado']:
 # --- ENCABEZADO ---
 col_logo, col_texto = st.columns([1, 6])
 with col_logo:
-    # 👇 LINK DE TU LOGO (Pégalo aquí)
-    LOGO_URL = "https://www.buenosairesbazar.com.ar/Temp/App_WebSite/App_PictureFiles/logonew.svg" 
+    # 👇 LINK DE TU LOGO
+    LOGO_URL = "https://cdn-icons-png.flaticon.com/512/4091/4091968.png" 
     st.image(LOGO_URL, width=80)
 with col_texto:
     st.title("Control de Asistencia Completo")
@@ -72,7 +75,6 @@ with st.sidebar:
     **Reglas Actuales:**
     1. **Tarde:** Si entra después de las {hora_entrada.strftime('%H:%M')}.
     2. **Extras:** Solo cuentan si se queda **más de {umbral_extras} minutos** después de las {hora_salida.strftime('%H:%M')}.
-       *(Ej: Si se va 20:15 no cuenta. Si se va 20:31 cuentan los 31 min)*.
     """)
     
     st.divider()
@@ -125,17 +127,16 @@ if archivo:
                 diff = entrada - objetivo_entrada
                 minutos_tarde = int(diff.total_seconds() / 60)
             
-            # 2. EXTRAS (CON UMBRAL DE 30 MIN)
+            # 2. EXTRAS (CON UMBRAL)
             minutos_extras = 0
             if salida > objetivo_salida:
                 diff_extra = salida - objetivo_salida
                 minutos_reales = int(diff_extra.total_seconds() / 60)
                 
-                # AQUI ESTÁ EL CAMBIO: Solo sumamos si supera el umbral
                 if minutos_reales >= umbral_extras:
                     minutos_extras = minutos_reales
                 else:
-                    minutos_extras = 0 # Si se quedó 15 min, cuenta como 0
+                    minutos_extras = 0 
             
             return pd.Series([minutos_tarde, minutos_extras])
 
@@ -187,7 +188,7 @@ if archivo:
                 if row['Min_Tarde'] > 5:
                     estilos[4] = 'color: #d32f2f; font-weight: bold;'
                 
-                # Extras (Solo se pinta si pasó el umbral y cuenta como extra)
+                # Extras
                 if row['Min_Extras'] > 0:
                     estilos[5] = 'color: #1976d2; font-weight: bold;'
                 
