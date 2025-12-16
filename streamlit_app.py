@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import timedelta, time
 
-# --- 1. CONFIGURACIÓN DE PÁGINA (Debe ser lo primero) ---
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="Gestión Buenos Aires Bazar",
     page_icon="🏢",
@@ -10,34 +10,30 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. ESTILOS CSS (MAQUILLAJE) ---
-# Esto oculta el menú de hamburguesa y el pie de página de Streamlit
+# --- 2. ESTILOS (SÓLO PARA OCULTAR MENÚS, SIN CAMBIAR COLORES DE FONDO) ---
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
-        .stApp {
-            background-color: #FAFAFA; /* Fondo gris muy clarito (opcional) */
-        }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 3. SEGURIDAD (CANDADO) ---
-# Si no quieres clave, borra o comenta estas 4 líneas
+# Si prefieres quitar la clave, pon un # al inicio de las siguientes 4 líneas
 clave = st.sidebar.text_input("🔒 Clave de Acceso", type="password")
-if clave != "admin123":
-    st.warning("👈 Por favor, ingresa la clave en el menú lateral para acceder.")
-    st.stop() # Frena la app aquí
+if clave != "1519":
+    st.warning("👈 Ingresa la clave '1519' en el menú lateral para ver los datos.")
+    st.stop() 
 
-# --- 4. ENCABEZADO CON LOGO ---
+# --- 4. ENCABEZADO ---
 col_logo, col_texto = st.columns([1, 6])
 
 with col_logo:
-    # URL DE TU LOGO: Reemplaza lo que está entre comillas por el link de tu logo real.
-    # Si no tienes link, deja este que es un icono genérico de empresa.
-    LOGO_URL = "https://share.google/1glH6eX5vazkTjNo2"
+    # Reemplaza el enlace entre comillas por la dirección de tu logo
+    LOGO_URL = "https://share.google/1glH6eX5vazkTjNo2" 
     st.image(LOGO_URL, width=80)
+ 
 
 with col_texto:
     st.title("Control de Asistencia")
@@ -56,7 +52,7 @@ archivo = st.file_uploader("📂 Sube el archivo Transaction aquí", type=['csv'
 
 if archivo:
     try:
-        # Lectura
+        # Lectura inteligente
         if archivo.name.endswith('.csv'):
             df = pd.read_csv(archivo, header=3)
         else:
@@ -103,25 +99,29 @@ if archivo:
             resumen = datos_emp.groupby('Date').size().reset_index(name='Fichadas')
             final = pd.merge(resumen, tardanzas_emp[['Date', 'Minutos_Tarde']], on='Date', how='left')
 
-            # Métricas visuales
+            # Métricas
             k1, k2, k3 = st.columns(3)
             k1.metric("Días Asistidos", len(final))
             
             tarde_total = final['Minutos_Tarde'].sum()
-            k2.metric("Minutos Tarde Acumulados", f"{tarde_total} min", 
-                      delta="- Malo" if tarde_total > 60 else "Normal") # Delta muestra flechita
+            k2.metric("Minutos Tarde Acumulados", f"{tarde_total} min")
 
-            # Tabla con colores ESTÉTICOS
+            # Tabla
             st.write("👇 Selecciona una fila para ver el detalle:")
             
-            # Definimos los colores de la tabla
+            # --- CORRECCIÓN DE COLORES DE LA TABLA ---
+            # Usamos una lógica más segura que no rompa el modo oscuro
             def colorear(val):
-                # Rojo suave si faltan fichadas, Verde suave si está OK
-                color = '#ffcdd2' if val < 4 else '#e8f5e9' 
-                return f'background-color: {color}'
-
+                # En lugar de colores pastel fijos, usamos lógica condicional simple
+                # Si quieres que se vea bien en oscuro y claro, a veces es mejor no forzar background
+                if val < 4:
+                    return 'color: red; font-weight: bold' # Letra roja negrita (se lee en blanco y negro)
+                else:
+                    return 'color: green' # Letra verde
+            
             display_cols = final[['Date', 'Fichadas', 'Minutos_Tarde']]
             
+            # Aplicamos estilo solo al texto, no al fondo, para evitar problemas de contraste
             event = st.dataframe(
                 display_cols.style.applymap(colorear, subset=['Fichadas']),
                 use_container_width=True,
@@ -130,7 +130,7 @@ if archivo:
                 hide_index=True
             )
 
-            # Drill-down (Detalle al hacer clic)
+            # Drill-down
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]
                 fecha = display_cols.iloc[idx]['Date']
