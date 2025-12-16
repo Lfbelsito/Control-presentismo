@@ -26,7 +26,7 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 def verificar_clave():
-    if st.session_state['password_input'] == CLAVE_REAL:
+    if st.session_state['password_input'] == CLAVE_REAL:1519
         st.session_state['autenticado'] = True
     else:
         st.error("⛔ Contraseña incorrecta")
